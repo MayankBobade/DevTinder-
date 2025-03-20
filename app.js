@@ -2,8 +2,10 @@ const connectDB=require('./database.js');
 const express=require('express');
 const app=express();
 
-const user=require('./schemas/user.js')
-const validator=require("validator")
+const user=require('./schemas/user.js');
+const validator=require("validator");
+const{userValidation}=require("./uservalidation.js");
+const bcrypt=require('bcrypt');
 
 
 connectDB().then(()=>{
@@ -21,11 +23,16 @@ app.use(express.json());
 
 app.post("/signup",async(req,res)=>{
  try{
-    const newUser=new user(req.body)
+    userValidation(req);
+
+    const{firstName,lastName,email,password,age,gender}=req.body;
+    const hashpassword=bcrypt.hash(password,10);
+    
+    const newUser=new user({firstName,lastName,email,hashpassword,age,gender})
     console.log(req.body);
     const mail=req.body.email;
 
-    // below is api level validation,commented out becaue we are testing schema level validations
+    // below is api level validation,commented out becaue we are testing schema level validations,and uservalidationjs
     
     // if(!validator.isEmail(mail)){
     //     res.status(400).send("invalid email address")
@@ -38,7 +45,7 @@ app.post("/signup",async(req,res)=>{
     user: newUser
   });
 }catch(err){
-    res.send("error in saving the user");
+    res.send(err.message);
 }
 })
 
@@ -86,5 +93,31 @@ app.patch("/updateinfo", async (req, res) => {
         res.send(userupd);
     } catch (err) {
         res.status(500).send(`Could not update the user info: ${err.message}`);
+    }
+});
+
+app.post("/login", async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!validator.isEmail(email)) {
+            return res.status(400).json({ error: "Please enter a valid email ID" });
+        }
+
+        const usercred = await User.findOne({ email });
+
+        if (!usercred) {
+            return res.status(404).json({ error: "Could not find the user" });
+        }
+
+        const isPasswordMatched = await bcrypt.compare(password, usercred.password);
+
+        if (!isPasswordMatched) {
+            return res.status(401).json({ error: "Invalid password" });
+        }
+
+        res.status(200).json(usercred);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
