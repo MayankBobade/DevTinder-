@@ -19,16 +19,24 @@ connectDB().then(()=>{
 
 //now writing functionalities for my application
 app.use(express.json());
+
 // on sign up page,ie creating a new user,ie adding a new user to database
 
 app.post("/signup",async(req,res)=>{
  try{
-    userValidation(req);
+    await userValidation(req);
 
     const{firstName,lastName,email,password,age,gender}=req.body;
-    const hashpassword=bcrypt.hash(password,10);
+    const hashpassword= await bcrypt.hash(password,10);
     
-    const newUser=new user({firstName,lastName,email,hashpassword,age,gender})
+    const newUser = new user({
+        firstName,
+        lastName,
+        email,
+        password: hashpassword, // Ensure field name matches schema
+        age,
+        gender
+      });
     console.log(req.body);
     const mail=req.body.email;
 
@@ -104,13 +112,15 @@ app.post("/login", async (req, res) => {
             return res.status(400).json({ error: "Please enter a valid email ID" });
         }
 
-        const usercred = await User.findOne({ email });
+        const usercred = await user.findOne({ email });
 
         if (!usercred) {
             return res.status(404).json({ error: "Could not find the user" });
         }
+       
 
-        const isPasswordMatched = await bcrypt.compare(password, usercred.password);
+
+        const isPasswordMatched = bcrypt.compare(password, usercred.password);
 
         if (!isPasswordMatched) {
             return res.status(401).json({ error: "Invalid password" });
