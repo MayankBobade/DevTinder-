@@ -6,6 +6,10 @@ const user=require('./schemas/user.js');
 const validator=require("validator");
 const{userValidation}=require("./uservalidation.js");
 const bcrypt=require('bcrypt');
+const jwt=require('jsonwebtoken');
+const auth=require('./auth.js');
+const cookieParser = require("cookie-parser");
+
 
 
 connectDB().then(()=>{
@@ -19,6 +23,7 @@ connectDB().then(()=>{
 
 //now writing functionalities for my application
 app.use(express.json());
+app.use(cookieParser());
 
 // on sign up page,ie creating a new user,ie adding a new user to database
 
@@ -117,17 +122,39 @@ app.post("/login", async (req, res) => {
         if (!usercred) {
             return res.status(404).json({ error: "Could not find the user" });
         }
-       
 
-
-        const isPasswordMatched = bcrypt.compare(password, usercred.password);
+        const isPasswordMatched = await bcrypt.compare(password, usercred.password);
 
         if (!isPasswordMatched) {
             return res.status(401).json({ error: "Invalid password" });
         }
 
-        res.status(200).json(usercred);
+   
+        const token = jwt.sign({ email: usercred.email }, "devTinder", { expiresIn: "1h" });
+
+        
+        res.cookie("token", token, { httpOnly: true });
+
+        res.status(200).json({ message: "Login successful", token });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+
+app.get("/profile", auth, async (req, res) => {
+    try {
+        
+        const email = req.email;  //here the req.mail is send from auth.js because it can be directly attached with the request and send
+
+        const usercred = await user.findOne({ email });
+
+        if (!usercred) {
+            return res.status(404).send("User not found");
+        }
+
+        res.status(200).json(usercred);
+    } catch (error) {
+        res.status(500).send("Server Error");
     }
 });
