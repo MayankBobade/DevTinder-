@@ -64,41 +64,90 @@ app.post("/signup", async (req, res) => {
 // writing feed api's to fetch the users in the feed
 
 app.get("/feed",cookieVerifier, async (req, res) => {
-    const mail = email // Changed from req.body.email to req.query.email
+    const { email } = req.user; // Changed from req.body.email to req.query.email
     try {
-        const foundUser = await user.find({ email: mail });
+        const foundUser = await user.find({ email: email });
         res.send(foundUser);
     } catch {
         res.send("could not find the user");
     }
 });
 //now writing an api to delete account,ie to delete the user from the database
-
-app.delete("/deleteaccount",cookieVerifier, async (req, res) => {
-    const mail = email; // Changed from req.body.email to req.query.email
+app.delete("/deleteaccount", cookieVerifier, async (req, res) => {
+    const { email } = req.user;
     try {
-        const deleteduser = await user.findOneAndDelete({ email: mail });
-        res.send("user deleted successfully");
+        
+        const deletedUser = await user.findOneAndDelete({ email: email });
+      
+        if (!deletedUser) {
+            return res.status(404).send("User not found");
+        }
+
+        // 3. Clear cookie BEFORE sending response
+        // 4. Use correct cookie name 'token' 
+        // 5. Include cookie options if they were set during initial creation
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/'
+        });
+
+        // 6. Send success response after cookie clearance
+        res.send("User deleted successfully");
     } catch (err) {
-        res.status(400).send("cannot delete the user");
+        // 7. More appropriate status code for server errors
+        console.error("Delete account error:", err);
+        res.status(500).send("Cannot delete the user");
     }
 });
 
 
 app.patch("/updateinfo",cookieVerifier, async (req, res) => {
-    const userEmail = req.body.email;
+    
     try {
-        const userupd = await user.findOneAndUpdate(
-            { email: userEmail },
-            { $set: { firstName: req.body.firstName } } ,
-            { returnDocument:'after',runValidators:true,}
-        );
-
-        if (!userupd) {
-            return res.status(404).send("User not found");
+        const { email } = req.user;
+        const updateFields = {};
+        
+        // List of allowed fields to update
+        const allowedFields = ['firstName', 'lastName', 'age', 'gender', 'password'];
+        
+        // Prepare update object
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                // Special handling for password
+                if (field === 'password') {
+                    const hashPassword = await bcrypt.hash(req.body.password, 10);
+                    updateFields.password = hashPassword;
+                } else {
+                    updateFields[field] = req.body[field];
+                }
+            }
         }
 
-        res.send(userupd);
+        // Validate age if being updated
+        if (updateFields.age !== undefined) {
+            const ageNum = Number(updateFields.age);
+            if (isNaN(ageNum) || ageNum < 18) {
+                return res.status(400).json({ error: "Age must be a number ≥ 18" });
+            }
+            updateFields.age = ageNum;
+        }
+
+        const updatedUser = await user.findOneAndUpdate(
+            { email: email },
+            { $set: updateFields },
+            { 
+                new: true, // Return updated document
+                runValidators: true // Run schema validators
+            }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.send(updatedUser);
     } catch (err) {
         res.status(500).send(`Could not update the user info: ${err.message}`);
     }
