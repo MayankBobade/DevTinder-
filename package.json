@@ -7,5 +7,15 @@
     "mongodb": "^6.14.2",
     "mongoose": "^8.12.1",
     "validator": "^13.12.0"
-  }
+  },
+  "name": "namastenode",
+  "version": "1.0.0",
+  "main": "app.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }
