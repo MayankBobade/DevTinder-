@@ -11,6 +11,8 @@ const { userauth } = require('./middlewares/auth.js');
 const { cookieVerifier } = require('./middlewares/cookieverification.js');
 const cookieParser = require("cookie-parser");
 
+const connection=require('./schemas/connections.js')
+
 
 
 connectDB().then(()=>{
@@ -193,3 +195,124 @@ app.get("/profile", cookieVerifier, async (req, res) => {
       res.status(500).json({ error: "Server Error", details: error.message });
     }
   });
+
+
+ app.post("/requests/send", cookieVerifier, async (req, res) => {
+  const fromuserid = req.user_id;
+  const { touserid, status } = req.body;
+
+  try {
+    const existingConnectionRequest = await connection.findOne({
+      $or: [
+        { fromuserid, touserid },
+        { fromuserid: touserid, touserid: fromuserid }
+      ]
+    });
+
+    if (existingConnectionRequest) {
+      const isInterested = existingConnectionRequest.status;
+
+      if (isInterested === "interested") {
+        const reqId = existingConnectionRequest._id;
+        await connection.findByIdAndUpdate(reqId, { status });
+        return res.send("Connection accepted");
+      }
+
+      return res.send("Could not send the connection request");
+    }
+
+    const fromuser = await user.findById(fromuserid);
+    const touser = await user.findById(touserid);
+
+    if (!fromuser || !touser) {
+      return res.status(400).send("Unauthorized user involved");
+    }
+
+    const connectionRequest = new connection({
+      fromuserid,
+      touserid,
+      status,
+    });
+
+    await connectionRequest.save();
+    res.send("Connection request sent successfully");
+  } catch (error) {
+    res.status(500).send(`Error: ${err.message}`);
+  }
+});
+
+
+app.post("/request/recieve/:status/:reqId", cookieVerifier, async (req, res) => {
+  const { status, reqId } = req.params;
+
+  try {
+    const allowedUpdates = ["accepted", "rejected"];
+    const isAllowedUpdate = allowedUpdates.includes(status);
+
+    if (!isAllowedUpdate) {
+      return res.status(400).json({ message: "Status not allowed" });
+    }
+
+    const request = await connection.findById(reqId);
+
+    if (!request) {
+      return res.send("Connection request not found");
+    }
+
+    request.status = status;
+    await request.save();
+
+    res.send("Connection request updated");
+  } catch (err) {
+    res.status(500).send(`Error: ${err.message}`);
+  }
+});
+
+
+app.get("/user/requests", cookieVerifier, async (req, res) => {
+  try {
+    const userData = await user.findOne({ email: req.user.email });
+
+    if (!userData) {
+      return res.status(404).send("User not found");
+    }
+
+    const userId = userData._id;
+
+    const connectionRequests = await connection.find({
+      touserid: userId,
+      status: "interested"
+    }).populate("fromuserid", "firstName lastName")
+     .populate("touserid", "firstName lastName");
+
+
+    res.json(connectionRequests);
+  } catch (err) {
+    console.error("Error fetching connection requests:", err);
+    res.status(500).send("Server error");
+  }
+});
+
+app.get("/users/connections", cookieVerifier, async (req, res) => {
+  try {
+    const userData = await user.findOne({ email: email });
+    if (!userData) {
+      return res.status(404).send("Could not find the user, please login again");
+    }
+
+    const userId = userData._id;
+
+    const connectionRequests = await connection.find({
+        $or: [
+    { touserid: userId, status: "accepted" },
+    { fromuserid: userId, status: "accepted" }
+       ]})
+     .populate("fromuserid", "firstName lastName")
+     .populate("touserid", "firstName lastName");
+
+    res.json(connectionRequests);
+  } catch (err) {
+    console.error("Error fetching connections:", err);
+    res.status(500).send("Server error");
+  }
+});
