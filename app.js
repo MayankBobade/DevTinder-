@@ -64,16 +64,16 @@ app.post("/signup", async (req, res) => {
 });
 // okay so now i have my users in the collection ,
 // writing feed api's to fetch the users in the feed
-
-app.get("/feed",cookieVerifier, async (req, res) => {
-    const { email } = req.user; // Changed from req.body.email to req.query.email
-    try {
-        const foundUser = await user.find({ email: email });
-        res.send(foundUser);
-    } catch {
-        res.send("could not find the user");
-    }
-});
+// feed api is wrotten at bottom of this page
+// app.get("/feed",cookieVerifier, async (req, res) => {
+//     const { email } = req.user; // Changed from req.body.email to req.query.email
+//     try {
+//         const foundUser = await user.find({ email: email });
+//         res.send(foundUser);
+//     } catch {
+//         res.send("could not find the user");
+//     }
+// });
 //now writing an api to delete account,ie to delete the user from the database
 app.delete("/deleteaccount", cookieVerifier, async (req, res) => {
     const { email } = req.user;
@@ -295,6 +295,7 @@ app.get("/user/requests", cookieVerifier, async (req, res) => {
 
 app.get("/users/connections", cookieVerifier, async (req, res) => {
   try {
+    const email = req.user.email;
     const userData = await user.findOne({ email: email });
     if (!userData) {
       return res.status(404).send("Could not find the user, please login again");
@@ -315,4 +316,24 @@ app.get("/users/connections", cookieVerifier, async (req, res) => {
     console.error("Error fetching connections:", err);
     res.status(500).send("Server error");
   }
+});
+
+app.get("/feed",cookieVerifier,async(req,res)=>{
+  try{  
+     const email = req.user.email;
+     const loggedinuser=await user.findOne({email:email});  
+     const userconnections=await connection.find({ $OR:[{fromuserid:loggedinuser._id},{touserid:loggedinuser._id}]});
+     const hidefromfeed=new Set();
+     userconnections.forEach((request)=>{
+      hidefromfeed.add(request.fromuserid.toString());
+      hidefromfeed.add(request.touserid.toString());
+     })
+      
+     const users=await user.find({$and:[{_id:{$nin:Array.from(hidefromfeed)}},{_id:{$ne:loggedinuser._id}}]}).select("firstName lastName age gender")
+     res.json(users);
+
+     }
+     catch(err){
+      res.status(500).send("server error");
+     }
 });
